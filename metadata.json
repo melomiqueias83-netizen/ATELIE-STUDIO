@@ -1,0 +1,6 @@
+{
+  "name": "Atelier Club",
+  "description": "Clube gratuito de papéis de parede 4K sem anúncios com modelos editáveis por IA, criador de planos de fundo, estúdio fotográfico com inserção de fundo e integração com Instagram e Facebook.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

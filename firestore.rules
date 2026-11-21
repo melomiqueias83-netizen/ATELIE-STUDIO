@@ -1,0 +1,488 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: Deny all access by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Hardened Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Bootstrapped Admin (pure token check — safe inside list queries too)
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'miqueiasmelouber@gmail.com';
+    }
+
+    // Full Admin check (Bootstrapped verified Google email OR explicit /admins/{uid} doc)
+    function isAdmin() {
+      return isBootstrappedAdmin()
+        || (isVerifiedUser() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    // Validation Blueprint: UserProfile
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'handle', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'handle', 'photoUrl', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80
+        && data.handle is string && data.handle.size() >= 1 && data.handle.size() <= 50
+        && (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 500))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: UserPrivateInfo (PII Isolated)
+    function isValidUserPrivateInfo(data) {
+      return data.keys().hasAll(['uid', 'email', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: UserFavorite
+    function isValidFavorite(data) {
+      return data.keys().hasAll(['uid', 'wallpaperId', 'title', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'wallpaperId', 'title', 'createdAt'])
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && isValidId(data.wallpaperId)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 120
+        && data.createdAt is timestamp;
+    }
+
+    // Validation Blueprint: Background Recipe Map
+    function isValidBackgroundMap(bg) {
+      return bg is map
+        && bg.keys().hasAll(['id', 'name', 'patternType', 'palette', 'lighting', 'texture'])
+        && bg.keys().hasOnly(['id', 'name', 'description', 'patternType', 'palette', 'lighting', 'texture', 'socialCaption', 'hashtags', 'imageUrl'])
+        && isValidId(bg.id)
+        && bg.name is string && bg.name.size() >= 1 && bg.name.size() <= 120
+        && (!('description' in bg) || (bg.description is string && bg.description.size() <= 300))
+        && bg.patternType in ['cyclorama', 'mesh', 'architectural', 'silk', 'botanical', 'geometric', 'horizon']
+        && bg.palette is map
+        && bg.lighting is map
+        && bg.texture is map
+        && (!('imageUrl' in bg) || (bg.imageUrl is string && bg.imageUrl.size() <= 300))
+        && (!('socialCaption' in bg) || (bg.socialCaption is string && bg.socialCaption.size() <= 500))
+        && (!('hashtags' in bg) || (bg.hashtags is list && bg.hashtags.size() <= 10 && (bg.hashtags.size() == 0 || (bg.hashtags[0] is string && bg.hashtags[0].size() <= 50))));
+    }
+
+    // Validation Blueprint: StudioProject
+    function isValidProject(data) {
+      return data.keys().hasAll(['id', 'uid', 'kind', 'title', 'aspectId', 'socialCaption', 'hashtags', 'background', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'uid', 'kind', 'title', 'aspectId', 'socialCaption', 'hashtags', 'background', 'layers', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && data.kind in ['template', 'background']
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 120
+        && data.aspectId is string && data.aspectId.size() >= 1 && data.aspectId.size() <= 32
+        && data.socialCaption is string && data.socialCaption.size() <= 500
+        && data.hashtags is list && data.hashtags.size() <= 10 && (data.hashtags.size() == 0 || (data.hashtags[0] is string && data.hashtags[0].size() <= 50))
+        && isValidBackgroundMap(data.background)
+        && (!('layers' in data) || (data.layers is list && data.layers.size() <= 20 && (data.layers.size() == 0 || data.layers[0] is map)))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: AiHistoryEntry (Last 10 AI prompts & results)
+    function isValidAiHistoryEntry(data) {
+      return data.keys().hasAll(['id', 'uid', 'kind', 'prompt', 'resultTitle', 'resultSummary', 'createdAt'])
+        && data.keys().hasOnly(['id', 'uid', 'kind', 'prompt', 'resultTitle', 'resultSummary', 'aspectId', 'category', 'mood', 'templateData', 'backgroundData', 'photoAnalysisData', 'createdAt'])
+        && isValidId(data.id)
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && data.kind in ['template', 'background', 'photo-analysis']
+        && data.prompt is string && data.prompt.size() >= 1 && data.prompt.size() <= 500
+        && data.resultTitle is string && data.resultTitle.size() >= 1 && data.resultTitle.size() <= 120
+        && data.resultSummary is string && data.resultSummary.size() <= 500
+        && (!('aspectId' in data) || (data.aspectId is string && data.aspectId.size() <= 32))
+        && (!('category' in data) || (data.category is string && data.category.size() <= 80))
+        && (!('mood' in data) || (data.mood is string && data.mood.size() <= 80))
+        && (!('templateData' in data) || (data.templateData is map && data.templateData.keys().size() <= 12))
+        && (!('backgroundData' in data) || isValidBackgroundMap(data.backgroundData))
+        && (!('photoAnalysisData' in data) || (data.photoAnalysisData is map && data.photoAnalysisData.keys().size() <= 10))
+        && data.createdAt is timestamp;
+    }
+
+    // Validation Blueprint: AdminMember
+    function isValidAdminMember(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'role', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && data.role == 'admin'
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: MonetizationConfig (AdSense + AdMob + Announcement + Donation + FCM)
+    function isValidAdSenseMap(ads) {
+      return ads is map
+        && ads.keys().hasAll(['enabled', 'clientId', 'gallerySlotId', 'studioSlotId', 'footerSlotId', 'autoAds'])
+        && ads.keys().hasOnly(['enabled', 'clientId', 'gallerySlotId', 'studioSlotId', 'footerSlotId', 'autoAds'])
+        && ads.enabled is bool
+        && ads.autoAds is bool
+        && ads.clientId is string && ads.clientId.size() <= 40 && ads.clientId.matches('^$|^ca-pub-[0-9]{10,20}$')
+        && ads.gallerySlotId is string && ads.gallerySlotId.size() <= 30 && ads.gallerySlotId.matches('^[0-9]*$')
+        && ads.studioSlotId is string && ads.studioSlotId.size() <= 30 && ads.studioSlotId.matches('^[0-9]*$')
+        && ads.footerSlotId is string && ads.footerSlotId.size() <= 30 && ads.footerSlotId.matches('^[0-9]*$');
+    }
+
+    function isValidAdMobMap(mob) {
+      return mob is map
+        && mob.keys().hasAll(['enabled', 'appId', 'bannerUnitId', 'interstitialUnitId', 'rewardedUnitId', 'testMode', 'frequencyMinutes'])
+        && mob.keys().hasOnly(['enabled', 'appId', 'bannerUnitId', 'interstitialUnitId', 'rewardedUnitId', 'testMode', 'frequencyMinutes'])
+        && mob.enabled is bool
+        && mob.testMode is bool
+        && mob.appId is string && mob.appId.size() <= 60 && mob.appId.matches('^$|^ca-app-pub-[0-9]+~[0-9]+$')
+        && mob.bannerUnitId is string && mob.bannerUnitId.size() <= 60 && mob.bannerUnitId.matches('^$|^ca-app-pub-[0-9]+/[0-9]+$')
+        && mob.interstitialUnitId is string && mob.interstitialUnitId.size() <= 60 && mob.interstitialUnitId.matches('^$|^ca-app-pub-[0-9]+/[0-9]+$')
+        && mob.rewardedUnitId is string && mob.rewardedUnitId.size() <= 60 && mob.rewardedUnitId.matches('^$|^ca-app-pub-[0-9]+/[0-9]+$')
+        && mob.frequencyMinutes is number && mob.frequencyMinutes >= 1 && mob.frequencyMinutes <= 60;
+    }
+
+    function isValidAnnouncementMap(ann) {
+      return ann is map
+        && ann.keys().hasAll(['enabled', 'text', 'ctaLabel', 'targetTab'])
+        && ann.keys().hasOnly(['enabled', 'text', 'ctaLabel', 'targetTab'])
+        && ann.enabled is bool
+        && ann.text is string && ann.text.size() <= 240
+        && ann.ctaLabel is string && ann.ctaLabel.size() <= 40
+        && ann.targetTab in ['gallery', 'templates', 'background', 'photo'];
+    }
+
+    function isValidDonationMap(don) {
+      return don is map
+        && don.keys().hasAll(['enabled', 'pixKey', 'recipientName', 'recipientCity', 'thankYouMessage'])
+        && don.keys().hasOnly(['enabled', 'pixKey', 'recipientName', 'recipientCity', 'thankYouMessage'])
+        && don.enabled is bool
+        && don.pixKey is string && don.pixKey.size() <= 120
+        && don.recipientName is string && don.recipientName.size() >= 1 && don.recipientName.size() <= 25
+        && don.recipientCity is string && don.recipientCity.size() >= 1 && don.recipientCity.size() <= 15
+        && don.thankYouMessage is string && don.thankYouMessage.size() <= 240;
+    }
+
+    function isValidFcmMap(fcm) {
+      return fcm is map
+        && fcm.keys().hasAll(['enabled', 'vapidKey', 'autoNotifyOnNewWallpaper'])
+        && fcm.keys().hasOnly(['enabled', 'vapidKey', 'autoNotifyOnNewWallpaper'])
+        && fcm.enabled is bool
+        && fcm.autoNotifyOnNewWallpaper is bool
+        && fcm.vapidKey is string && fcm.vapidKey.size() <= 200 && fcm.vapidKey.matches('^[a-zA-Z0-9_\\-]*$');
+    }
+
+    function isValidMonetizationConfig(data) {
+      return data.keys().hasAll(['adsEnabled', 'adsense', 'admob', 'announcementBanner', 'donation', 'fcm', 'updatedBy', 'updatedAt'])
+        && data.keys().hasOnly(['adsEnabled', 'adsense', 'admob', 'announcementBanner', 'donation', 'fcm', 'updatedBy', 'updatedAt'])
+        && data.adsEnabled is bool
+        && isValidAdSenseMap(data.adsense)
+        && isValidAdMobMap(data.admob)
+        && isValidAnnouncementMap(data.announcementBanner)
+        && isValidDonationMap(data.donation)
+        && isValidFcmMap(data.fcm)
+        && isValidId(data.updatedBy)
+        && data.updatedBy == request.auth.uid
+        && data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: PushSubscription
+    function isValidPushSubscription(data) {
+      return data.keys().hasAll(['id', 'uid', 'token', 'platform', 'enabled', 'topic', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'uid', 'token', 'platform', 'enabled', 'topic', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && data.token is string && data.token.size() >= 10 && data.token.size() <= 512
+        && data.platform in ['web', 'android']
+        && data.enabled is bool
+        && data.topic == 'new_collections'
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: CollectionAlert
+    function isValidCollectionAlert(data) {
+      return data.keys().hasAll(['id', 'title', 'body', 'category', 'wallpaperId', 'imageUrl', 'createdBy', 'createdAt'])
+        && data.keys().hasOnly(['id', 'title', 'body', 'category', 'wallpaperId', 'imageUrl', 'createdBy', 'createdAt'])
+        && isValidId(data.id)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 120
+        && data.body is string && data.body.size() >= 1 && data.body.size() <= 240
+        && data.category in ['Todos', 'Fotografia Editorial', 'Estúdio & Luz', 'Abstrato & Seda', 'Arquitetura', 'Minimalista Noturno']
+        && data.wallpaperId is string && data.wallpaperId.size() <= 128
+        && data.imageUrl is string && data.imageUrl.size() <= 500 && (data.imageUrl == '' || data.imageUrl.matches('^(/src/assets/|https://).*$'))
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp;
+    }
+
+    // Validation Blueprint: CatalogWallpaperOverride
+    function isValidCatalogItem(data) {
+      return data.keys().hasAll(['id', 'title', 'author', 'category', 'tags', 'resolution', 'aspectLabel', 'palette', 'cameraSpec', 'isFeatured', 'isHidden', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'title', 'author', 'category', 'tags', 'resolution', 'aspectLabel', 'imageUrl', 'recipe', 'palette', 'cameraSpec', 'isFeatured', 'isHidden', 'createdBy', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 120
+        && data.author is string && data.author.size() >= 1 && data.author.size() <= 80
+        && data.category in ['Fotografia Editorial', 'Estúdio & Luz', 'Abstrato & Seda', 'Arquitetura', 'Minimalista Noturno']
+        && data.tags is list && data.tags.size() <= 6 && (data.tags.size() == 0 || (data.tags[0] is string && data.tags[0].size() <= 32))
+        && data.resolution is string && data.resolution.size() >= 1 && data.resolution.size() <= 32
+        && data.aspectLabel in ['9:16', '16:9']
+        && (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 500 && (data.imageUrl == '' || data.imageUrl.matches('^(/src/assets/|https://).*$'))))
+        && (!('recipe' in data) || isValidBackgroundMap(data.recipe))
+        && data.palette is list && data.palette.size() >= 1 && data.palette.size() <= 6 && (data.palette[0] is string && data.palette[0].size() <= 16)
+        && data.cameraSpec is string && data.cameraSpec.size() >= 1 && data.cameraSpec.size() <= 120
+        && data.isFeatured is bool
+        && data.isHidden is bool
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // Collection: /admins/{adminUid}
+    match /admins/{adminUid} {
+      allow get: if isValidId(adminUid) && (isOwner(adminUid) || isAdmin());
+      allow list: if false;
+      allow create: if isValidId(adminUid)
+        && isAdmin()
+        && isValidAdminMember(incoming())
+        && incoming().uid == adminUid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(adminUid)
+        && isAdmin()
+        && isValidAdminMember(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'role', 'updatedAt']);
+      allow delete: if isValidId(adminUid) && isAdmin() && adminUid != request.auth.uid;
+    }
+
+    // Collection: /appConfig/{docId} (monetization, announcements, donation & FCM config)
+    match /appConfig/{docId} {
+      allow get: if isValidId(docId) && docId == 'monetization';
+      allow list: if false;
+      allow create: if isValidId(docId)
+        && docId == 'monetization'
+        && isAdmin()
+        && isValidMonetizationConfig(incoming())
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(docId)
+        && docId == 'monetization'
+        && isAdmin()
+        && isValidMonetizationConfig(incoming())
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['adsEnabled', 'adsense', 'admob', 'announcementBanner', 'donation', 'fcm', 'updatedBy', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    // Collection: /pushSubscriptions/{subId}
+    match /pushSubscriptions/{subId} {
+      allow get: if isValidId(subId) && isVerifiedUser() && (isOwner(existing().uid) || isAdmin());
+      allow list: if isVerifiedUser() && (resource.data.uid == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(subId)
+        && isVerifiedUser()
+        && isValidPushSubscription(incoming())
+        && incoming().id == subId
+        && incoming().uid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(subId)
+        && isVerifiedUser()
+        && isOwner(existing().uid)
+        && isValidPushSubscription(incoming())
+        && incoming().id == existing().id
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['token', 'platform', 'enabled', 'topic', 'updatedAt']);
+      allow delete: if isValidId(subId) && isVerifiedUser() && (isOwner(existing().uid) || isAdmin());
+    }
+
+    // Collection: /collectionAlerts/{alertId}
+    match /collectionAlerts/{alertId} {
+      allow get: if isValidId(alertId);
+      allow list: if resource.data.id is string;
+      allow create: if isValidId(alertId)
+        && isAdmin()
+        && isValidCollectionAlert(incoming())
+        && incoming().id == alertId
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isValidId(alertId) && isAdmin();
+    }
+
+    // Collection: /catalogItems/{itemId}
+    match /catalogItems/{itemId} {
+      allow get: if isValidId(itemId) && (existing().isHidden == false || isAdmin());
+      allow list: if resource.data.isHidden == false || isBootstrappedAdmin();
+      allow create: if isValidId(itemId)
+        && isAdmin()
+        && isValidCatalogItem(incoming())
+        && incoming().id == itemId
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(itemId)
+        && isAdmin()
+        && isValidCatalogItem(incoming())
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'title',
+          'author',
+          'category',
+          'tags',
+          'resolution',
+          'aspectLabel',
+          'imageUrl',
+          'recipe',
+          'palette',
+          'cameraSpec',
+          'isFeatured',
+          'isHidden',
+          'updatedAt'
+        ]);
+      allow delete: if isValidId(itemId) && isAdmin();
+    }
+
+    // Collection: /users/{userId}
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+      allow create: if isValidId(userId)
+        && isVerifiedUser()
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == userId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isVerifiedUser()
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'handle', 'photoUrl', 'updatedAt']);
+      allow delete: if isValidId(userId) && isVerifiedUser() && isOwner(userId);
+
+      // Subcollection: /users/{userId}/private/{docId} (PII Isolation)
+      match /private/{docId} {
+        allow get: if isValidId(userId) && isValidId(docId) && docId == 'info' && isOwner(userId);
+        allow list: if false;
+        allow create: if isValidId(userId)
+          && isValidId(docId)
+          && docId == 'info'
+          && isVerifiedUser()
+          && isOwner(userId)
+          && isValidUserPrivateInfo(incoming())
+          && incoming().uid == userId
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if isValidId(userId)
+          && isValidId(docId)
+          && docId == 'info'
+          && isVerifiedUser()
+          && isOwner(userId)
+          && isValidUserPrivateInfo(incoming())
+          && incoming().uid == existing().uid
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'updatedAt'])
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow delete: if isValidId(userId) && isValidId(docId) && docId == 'info' && isVerifiedUser() && isOwner(userId);
+      }
+
+      // Subcollection: /users/{userId}/favorites/{wallpaperId}
+      match /favorites/{wallpaperId} {
+        allow get: if isValidId(userId) && isValidId(wallpaperId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId) && resource.data.uid == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(wallpaperId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && isValidFavorite(incoming())
+          && incoming().uid == userId
+          && incoming().wallpaperId == wallpaperId
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if false;
+        allow delete: if isValidId(userId) && isValidId(wallpaperId) && isVerifiedUser() && isOwner(userId);
+      }
+
+      // Subcollection: /users/{userId}/projects/{projectId}
+      match /projects/{projectId} {
+        allow get: if isValidId(userId) && isValidId(projectId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId) && resource.data.uid == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(projectId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && isValidProject(incoming())
+          && incoming().uid == userId
+          && incoming().id == projectId
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if isValidId(userId)
+          && isValidId(projectId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && isValidProject(incoming())
+          && incoming().uid == existing().uid
+          && incoming().id == existing().id
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'aspectId', 'socialCaption', 'hashtags', 'background', 'layers', 'updatedAt'])
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow delete: if isValidId(userId) && isValidId(projectId) && isVerifiedUser() && isOwner(userId);
+      }
+
+      // Subcollection: /users/{userId}/aiHistory/{entryId}
+      match /aiHistory/{entryId} {
+        allow get: if isValidId(userId) && isValidId(entryId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId) && resource.data.uid == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(entryId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && isValidAiHistoryEntry(incoming())
+          && incoming().uid == userId
+          && incoming().id == entryId
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if false;
+        allow delete: if isValidId(userId) && isValidId(entryId) && isVerifiedUser() && isOwner(userId);
+      }
+    }
+  }
+}

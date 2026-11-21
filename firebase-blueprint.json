@@ -1,0 +1,523 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Publicly scoped studio profile for an authenticated user (no PII email).",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "handle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "photoUrl": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "displayName", "handle", "createdAt", "updatedAt"]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "Isolated PII document storing user email address, accessible strictly to the owner.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 254
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "updatedAt"]
+    },
+    "UserFavorite": {
+      "title": "UserFavorite",
+      "description": "Favorite wallpaper reference saved by the authenticated user.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "wallpaperId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "wallpaperId", "title", "createdAt"]
+    },
+    "StudioProject": {
+      "title": "StudioProject",
+      "description": "Lightweight editable AI template or studio background recipe synced for the user.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["template", "background"]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "aspectId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "socialCaption": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "hashtags": {
+          "type": "array"
+        },
+        "background": {
+          "type": "object"
+        },
+        "layers": {
+          "type": "array"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "uid",
+        "kind",
+        "title",
+        "aspectId",
+        "socialCaption",
+        "hashtags",
+        "background",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdminMember": {
+      "title": "AdminMember",
+      "description": "Verified administrator record synced for admin RBAC.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 254
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "role", "createdAt", "updatedAt"]
+    },
+    "MonetizationConfig": {
+      "title": "MonetizationConfig",
+      "description": "Global AdSense (Web), AdMob (Android), announcement banner, and developer PIX donation settings managed by the admin.",
+      "type": "object",
+      "properties": {
+        "adsEnabled": {
+          "type": "boolean"
+        },
+        "adsense": {
+          "type": "object"
+        },
+        "admob": {
+          "type": "object"
+        },
+        "announcementBanner": {
+          "type": "object"
+        },
+        "donation": {
+          "type": "object"
+        },
+        "fcm": {
+          "type": "object"
+        },
+        "updatedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["adsEnabled", "adsense", "admob", "announcementBanner", "donation", "fcm", "updatedBy", "updatedAt"]
+    },
+    "PushSubscription": {
+      "title": "PushSubscription",
+      "description": "User FCM push token and notification subscription status for new wallpaper collections.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "token": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 512
+        },
+        "platform": {
+          "type": "string",
+          "enum": ["web", "android"]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "topic": {
+          "type": "string",
+          "enum": ["new_collections"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "uid", "token", "platform", "enabled", "topic", "createdAt", "updatedAt"]
+    },
+    "CollectionAlert": {
+      "title": "CollectionAlert",
+      "description": "Admin-published push notification alert announcing new wallpaper collections.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "body": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "Todos",
+            "Fotografia Editorial",
+            "Estúdio & Luz",
+            "Abstrato & Seda",
+            "Arquitetura",
+            "Minimalista Noturno"
+          ]
+        },
+        "wallpaperId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "imageUrl": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "title", "body", "category", "wallpaperId", "imageUrl", "createdBy", "createdAt"]
+    },
+    "AiHistoryEntry": {
+      "title": "AiHistoryEntry",
+      "description": "Automatic history of the user's last 10 AI prompts and generated studio results.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["template", "background", "photo-analysis"]
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "resultTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "resultSummary": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "aspectId": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "mood": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "templateData": {
+          "type": "object"
+        },
+        "backgroundData": {
+          "type": "object"
+        },
+        "photoAnalysisData": {
+          "type": "object"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "uid", "kind", "prompt", "resultTitle", "resultSummary", "createdAt"]
+    },
+    "CatalogWallpaperOverride": {
+      "title": "CatalogWallpaperOverride",
+      "description": "Admin-managed wallpaper additions, hotfixes, or visibility overrides for the 4K gallery.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "Fotografia Editorial",
+            "Estúdio & Luz",
+            "Abstrato & Seda",
+            "Arquitetura",
+            "Minimalista Noturno"
+          ]
+        },
+        "tags": {
+          "type": "array"
+        },
+        "resolution": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "aspectLabel": {
+          "type": "string",
+          "enum": ["9:16", "16:9"]
+        },
+        "imageUrl": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "recipe": {
+          "type": "object"
+        },
+        "palette": {
+          "type": "array"
+        },
+        "cameraSpec": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "isFeatured": {
+          "type": "boolean"
+        },
+        "isHidden": {
+          "type": "boolean"
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "author",
+        "category",
+        "tags",
+        "resolution",
+        "aspectLabel",
+        "palette",
+        "cameraSpec",
+        "isFeatured",
+        "isHidden",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Authenticated user studio profile."
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivateInfo" },
+      "description": "Isolated PII document (info) for the authenticated user."
+    },
+    "/users/{userId}/favorites/{wallpaperId}": {
+      "schema": { "$ref": "#/entities/UserFavorite" },
+      "description": "User favorite wallpapers collection."
+    },
+    "/users/{userId}/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/StudioProject" },
+      "description": "User synced editable AI templates and background recipes."
+    },
+    "/users/{userId}/aiHistory/{entryId}": {
+      "schema": { "$ref": "#/entities/AiHistoryEntry" },
+      "description": "User's last 10 AI prompts and generated results for quick reuse."
+    },
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/AdminMember" },
+      "description": "Verified administrator accounts."
+    },
+    "/appConfig/{docId}": {
+      "schema": { "$ref": "#/entities/MonetizationConfig" },
+      "description": "Application-wide monetization (AdSense/AdMob), announcements, donation, and FCM push settings (docId: monetization)."
+    },
+    "/catalogItems/{itemId}": {
+      "schema": { "$ref": "#/entities/CatalogWallpaperOverride" },
+      "description": "Dynamic wallpaper additions and hotfix overrides managed by admin."
+    },
+    "/pushSubscriptions/{subId}": {
+      "schema": { "$ref": "#/entities/PushSubscription" },
+      "description": "Registered Web & Android FCM push tokens per verified user."
+    },
+    "/collectionAlerts/{alertId}": {
+      "schema": { "$ref": "#/entities/CollectionAlert" },
+      "description": "Publicly readable push notification feed of new wallpaper collections published by the admin."
+    }
+  }
+}
